@@ -7,7 +7,7 @@ from mne.time_frequency import psd_array_welch
 from sklearn.model_selection import train_test_split
 
 # Set dataset directory
-dataset_path = os.path.join("aps360project", "LieWaves")
+dataset_path = "LieWaves"
 
 # Path to the raw EEG data
 raw_data_path = os.path.join(dataset_path, "Raw")
@@ -88,75 +88,71 @@ psds, freqs = psd_array_welch(
 
 
 # Convert PSD results into a Pandas DataFrame
-psd_df = pd.DataFrame(psds, index=channel_names, columns=freqs)
-
-# Segment EEG data into overlapping windows
-segmented_psd_data = []
-segment_labels = []
+psd_df = pd.DataFrame(psds, index=channel_names, columns=freqs)# Segment EEG data into overlapping windows (per channel)
+segmented_single_channel_data = []
+single_channel_labels = []
 
 # Iterate over EEG files
 for filename, label in file_label_mapping.items():
     file_path = os.path.join(raw_data_path, filename)
     df = pd.read_csv(file_path)
-    
+
     # Transpose to match MNE format
-    data = df.values.T  
+    data = df.values.T
+
+    # Create MNE Raw object for filtering
+    info = mne.create_info(channel_names, sfreq, ch_types='eeg')
+    raw = mne.io.RawArray(data, info)
+    raw.filter(l_freq=0.5, h_freq=45, fir_design='firwin')
+    raw.notch_filter(freqs=[50, 60], fir_design='firwin')
+
+    data = raw.get_data()  # Get filtered data
 
     # Sliding window segmentation
     for start in range(0, data.shape[1] - nperseg, noverlap):
         segment = data[:, start:start + nperseg]
-        if segment.shape[1] == nperseg:  # Ensure full-length segments
-            # Compute Welch's PSD for this segment
+        if segment.shape[1] == nperseg:
             psds, freqs = psd_array_welch(
-                segment, 
-                sfreq=sfreq, 
-                fmin=0.5, fmax=45, 
-                n_fft=nperseg, 
-                n_overlap=noverlap, 
-                window='hamming', 
+                segment,
+                sfreq=sfreq,
+                fmin=0.5, fmax=45,
+                n_fft=nperseg,
+                n_overlap=noverlap,
+                window='hamming',
                 average='mean'
             )
+            for ch in range(psds.shape[0]):
+                # Shape (90,) -> (90, 1) for Conv2D input
+                segmented_single_channel_data.append(psds[ch][:, np.newaxis])
+                single_channel_labels.append(label)
 
-            segmented_psd_data.append(psds)  # Store PSD features
-            segment_labels.append(label)  # Store corresponding label
+
 
 # Convert to NumPy arrays
-segmented_psd_data = np.array(segmented_psd_data)  # Shape: (num_segments, channels, frequency_bins)
-segment_labels = np.array(segment_labels)  # Shape: (num_segments,)
-
-# Save PSD data instead of raw EEG segments
-np.save(os.path.join(dataset_path, "segmented_psd.npy"), segmented_psd_data)
-np.save(os.path.join(dataset_path, "segment_labels.npy"), segment_labels)
-
-print("Segmented PSD data saved!")
-
-# Load preprocessed PSD data
-X = np.load(os.path.join(dataset_path, "segmented_psd.npy"))  # Shape: (num_segments, 5, num_frequencies)
-y = np.load(os.path.join(dataset_path, "segment_labels.npy"))  # Shape: (num_segments,)
+X = np.array(segmented_single_channel_data)  # Shape: (segments * channels, 90, 1)
+y = np.array(single_channel_labels)          # Shape: (segments * channels,)
 
 # Split into training (80%), validation (10%), test (10%)
 X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
 X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, stratify=y_temp, random_state=42)
 
-# Reshape data to include a channel dimension (needed for Conv2D)
-X_train = X_train[..., np.newaxis]  # (3153, 5, 90, 1)
-X_val = X_val[..., np.newaxis]      # (394, 5, 90, 1)
-X_test = X_test[..., np.newaxis]    # (395, 5, 90, 1)
+# Save new single-channel data
+np.save(os.path.join(dataset_path, "X_train_single.npy"), X_train)
+np.save(os.path.join(dataset_path, "y_train_single.npy"), y_train)
+np.save(os.path.join(dataset_path, "X_val_single.npy"), X_val)
+np.save(os.path.join(dataset_path, "y_val_single.npy"), y_val)
+np.save(os.path.join(dataset_path, "X_test_single.npy"), X_test)
+np.save(os.path.join(dataset_path, "y_test_single.npy"), y_test)
 
-# Display sizes
+print("Single-channel PSD data saved!")
 print(f"Training: {X_train.shape}, Validation: {X_val.shape}, Test: {X_test.shape}")
 
-# Save split data
-np.save(os.path.join(dataset_path, "X_train.npy"), X_train)
-np.save(os.path.join(dataset_path, "y_train.npy"), y_train)
-np.save(os.path.join(dataset_path, "X_val.npy"), X_val)
-np.save(os.path.join(dataset_path, "y_val.npy"), y_val)
-np.save(os.path.join(dataset_path, "X_test.npy"), X_test)
-np.save(os.path.join(dataset_path, "y_test.npy"), y_test)
+# Load the saved file
+X_train = np.load("LieWaves/X_train_single.npy")
+y_train = np.load("LieWaves/y_train_single.npy")
+
+# Print shape info
+print("X_train shape:", X_train.shape)
+print("y_train shape:", y_train.shape)
 
 
-# Load the data
-data = np.load("LieWaves/X_train.npy")
-
-# Inspect the first 5 values
-# print(data[:5])
