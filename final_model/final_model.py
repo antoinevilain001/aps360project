@@ -5,6 +5,11 @@ import torch.nn as nn
 import torch.optim as optim
 
 
+# Patience = 150 triggered early stopping after 237 epochs
+#   So model trained for 87 epochs
+# LR = 0.001, no weight decay, Adam optimizer
+# criterion = nn.BCEWithLogitsLoss()  
+
 # My model
 def init_weights(m): # # Xavier Initialization Function
     if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):
