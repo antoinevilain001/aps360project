@@ -17,7 +17,7 @@ mne.set_log_level("WARNING")
 
 # Add your CSV filenames here
 true_files = ['joao_truth1.csv', 'joao_truth2.csv']
-lie_files = ['antoine_lie1.csv']
+lie_files = ['antoine_lie1.csv', 'joao_lie1.csv']
 eeg_channels = ['eeg_1', 'eeg_2', 'eeg_3', 'eeg_4']
 dataset_path = '.'  # Save output to current folder
 
@@ -86,3 +86,7 @@ np.save(os.path.join(dataset_path, "X_muse_test.npy"), X)
 np.save(os.path.join(dataset_path, "y_muse_test.npy"), y)
 
 print(f"Saved: X shape {X.shape}, y shape {y.shape}")
+
+# print amount of lies and truths in y
+print(f"Number of truths: {np.sum(y == 1)}")
+print(f"Number of lies: {np.sum(y == 0)}")
